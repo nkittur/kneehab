@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router-dom'
-import { db, ensureSettings, todayISO, upsertDailyLog } from '@/lib/db'
+import { db, getSettings, todayISO, upsertDailyLog } from '@/lib/db'
 import { protocolFor, exercise } from '@/lib/protocol'
 import { rehabPhaseFor, weekNumber } from '@/lib/phase'
 import { ProgressRing } from '@/components/ProgressRing'
@@ -14,7 +14,7 @@ import { ChevronRight } from 'lucide-react'
 
 export function Dashboard() {
   const date = todayISO()
-  const settings = useLiveQuery(() => ensureSettings(), [])
+  const settings = useLiveQuery(() => getSettings(), [])
   const log = useLiveQuery(() => db.dailyLogs.get(date), [date])
   const completions = useLiveQuery(() => db.setCompletions.where('date').equals(date).toArray(), [date]) ?? []
 

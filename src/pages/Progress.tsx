@@ -1,6 +1,6 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { db, ensureSettings } from '@/lib/db'
+import { db, getSettings } from '@/lib/db'
 import { protocolFor } from '@/lib/protocol'
 import { rehabPhaseFor } from '@/lib/phase'
 import { Card, CardContent } from '@/components/ui/card'
@@ -17,7 +17,7 @@ function lastNDays(n: number): string[] {
 }
 
 export function ProgressPage() {
-  const settings = useLiveQuery(() => ensureSettings(), [])
+  const settings = useLiveQuery(() => getSettings(), [])
   const logs = useLiveQuery(() => db.dailyLogs.toArray(), []) ?? []
   const completions = useLiveQuery(() => db.setCompletions.toArray(), []) ?? []
 

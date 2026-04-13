@@ -50,6 +50,10 @@ export async function ensureSettings(): Promise<Settings> {
   return s
 }
 
+export function getSettings(): Promise<Settings | undefined> {
+  return db.settings.get('singleton')
+}
+
 export async function upsertDailyLog(date: string, patch: Partial<DailyLog>) {
   const existing = await db.dailyLogs.get(date)
   const next: DailyLog = {

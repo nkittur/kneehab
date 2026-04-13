@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useRef } from 'react'
 import { toast } from 'sonner'
-import { db, ensureSettings } from '@/lib/db'
+import { db, getSettings } from '@/lib/db'
 import { downloadBackup, importJSON } from '@/lib/backup'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 export function SettingsPage() {
-  const settings = useLiveQuery(() => ensureSettings(), [])
+  const settings = useLiveQuery(() => getSettings(), [])
   const fileRef = useRef<HTMLInputElement>(null)
 
   if (!settings) return null
