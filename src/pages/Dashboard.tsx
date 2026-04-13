@@ -6,7 +6,6 @@ import { rehabPhaseFor, weekNumber } from '@/lib/phase'
 import { ProgressRing } from '@/components/ProgressRing'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { useEffect } from 'react'
@@ -68,18 +67,28 @@ export function Dashboard() {
       <Card>
         <CardContent className="p-4 space-y-4">
           <div className="text-sm font-medium">Today's symptoms</div>
-          <div className="grid grid-cols-2 gap-3 items-end">
+          <div className="space-y-4">
             <div>
-              <Label htmlFor="pops" className="text-xs text-muted-foreground">Knee pops</Label>
-              <Input
-                id="pops"
-                type="number"
-                inputMode="numeric"
-                min={0}
-                value={log?.pops ?? ''}
-                onChange={e => upsertDailyLog(date, { pops: e.target.value === '' ? null : Number(e.target.value) })}
-                placeholder="0"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <Label className="text-xs text-muted-foreground">Knee pops today</Label>
+                <span className="text-2xl font-semibold tabular-nums">{log?.pops ?? 0}</span>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  className="flex-1 h-14 text-base"
+                  onClick={() => upsertDailyLog(date, { pops: (log?.pops ?? 0) + 1 })}
+                >
+                  +1 pop
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-14 px-5"
+                  disabled={(log?.pops ?? 0) <= 0}
+                  onClick={() => upsertDailyLog(date, { pops: Math.max(0, (log?.pops ?? 0) - 1) })}
+                >
+                  −
+                </Button>
+              </div>
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">Pain: {log?.pain ?? 0}/10</Label>
