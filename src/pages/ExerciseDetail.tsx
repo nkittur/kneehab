@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { ChevronLeft } from 'lucide-react'
 import { db, todayISO, toggleSet } from '@/lib/db'
 import { PROTOCOL, exercise } from '@/lib/protocol'
-import { ExerciseCarousel } from '@/components/ExerciseCarousel'
+import { ExerciseDemo } from '@/components/ExerciseDemo'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -26,7 +26,7 @@ export function ExerciseDetail() {
         <ChevronLeft className="h-4 w-4" /> Back
       </Link>
 
-      <ExerciseCarousel images={ex.images} name={ex.name} />
+      <ExerciseDemo name={ex.name} />
 
       <div>
         <h1 className="text-2xl font-semibold">{ex.name}</h1>
