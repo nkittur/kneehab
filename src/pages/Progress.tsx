@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Bar, BarChart, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { db, getSettings } from '@/lib/db'
-import { protocolFor } from '@/lib/protocol'
+import { db, getSettings, modeOf } from '@/lib/db'
+import { protocolFor, durabilityItems } from '@/lib/protocol'
 import { rehabPhaseFor } from '@/lib/phase'
 import { Card, CardContent } from '@/components/ui/card'
 
@@ -30,9 +30,13 @@ export function ProgressPage() {
 
   const rows = days.map(d => {
     const log = logByDate.get(d)
-    const isSport = log?.isSportDay ?? false
-    const phase = isSport ? 'pregame' : rehabPhaseFor(settings.programStartDate, d)
-    const items = protocolFor(phase).concat(isSport ? protocolFor('postgame') : [])
+    const mode = modeOf(log)
+    const items =
+      mode === 'durability'
+        ? durabilityItems()
+        : mode === 'sport'
+          ? protocolFor('pregame').concat(protocolFor('postgame'))
+          : protocolFor(rehabPhaseFor(settings.programStartDate, d))
     const total = items.reduce((s, p) => s + p.sets, 0) || 1
     const done = compByDate.get(d) ?? 0
     return {

@@ -26,12 +26,27 @@ export function ExerciseDetail() {
         <ChevronLeft className="h-4 w-4" /> Back
       </Link>
 
-      <ExerciseDemo name={ex.name} />
+      <ExerciseDemo name={ex.name} demoUrl={ex.demoUrl} />
 
       <div>
         <h1 className="text-2xl font-semibold">{ex.name}</h1>
         {ex.targetMuscle && <div className="text-sm text-muted-foreground">{ex.targetMuscle}</div>}
       </div>
+
+      {(item.tempo || item.load) && (
+        <div className="flex flex-wrap gap-2">
+          {item.tempo && (
+            <span className="text-xs rounded-full bg-muted px-3 py-1">
+              <span className="text-muted-foreground">Tempo </span>{item.tempo}
+            </span>
+          )}
+          {item.load && (
+            <span className="text-xs rounded-full bg-muted px-3 py-1">
+              <span className="text-muted-foreground">Load </span>{item.load}
+            </span>
+          )}
+        </div>
+      )}
 
       <Card className="bg-primary/5 border-primary/20">
         <CardContent className="p-4">
@@ -42,6 +57,20 @@ export function ExerciseDetail() {
 
       {ex.instructions && (
         <div className="text-sm leading-relaxed text-muted-foreground">{ex.instructions}</div>
+      )}
+
+      {ex.whyItMatters && (
+        <div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Why it matters</div>
+          <div className="text-sm leading-relaxed">{ex.whyItMatters}</div>
+        </div>
+      )}
+
+      {ex.progression && (
+        <div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Progression</div>
+          <div className="text-sm leading-relaxed text-muted-foreground">{ex.progression}</div>
+        </div>
       )}
 
       <div>

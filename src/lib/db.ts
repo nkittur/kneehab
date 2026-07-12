@@ -1,12 +1,20 @@
 import Dexie, { type EntityTable } from 'dexie'
 
+export type DayMode = 'rehab' | 'sport' | 'durability'
+
 export type DailyLog = {
   date: string // YYYY-MM-DD (local)
   isSportDay: boolean
+  mode?: DayMode // undefined on legacy logs → derived from isSportDay
   sport?: 'basketball' | 'pickleball' | null
   pops?: number | null
   pain?: number | null // 0–10
   updatedAt: number
+}
+
+/** Effective mode for a log, back-compatible with logs written before `mode` existed. */
+export function modeOf(log?: Pick<DailyLog, 'mode' | 'isSportDay'>): DayMode {
+  return log?.mode ?? (log?.isSportDay ? 'sport' : 'rehab')
 }
 
 export type SetCompletion = {
