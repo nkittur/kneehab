@@ -36,3 +36,15 @@ export const AREA_LABEL: Record<ProgramId, string> = {
 export function areaLabel(id: ProgramId, fallback: string): string {
   return AREA_LABEL[id] ?? fallback
 }
+
+/**
+ * Shorter forms for the places a label has to fit in a tab — only where the
+ * full label is too long to sit in a row of chips.
+ */
+const AREA_SHORT_LABEL: Partial<Record<ProgramId, string>> = {
+  tibant: 'Shin',
+}
+
+export function areaShortLabel(id: ProgramId, fallback: string): string {
+  return AREA_SHORT_LABEL[id] ?? areaLabel(id, fallback)
+}
