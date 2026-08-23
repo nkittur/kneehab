@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { HashRouter, Route, Routes } from 'react-router-dom'
+import { HashRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Toaster } from '@/components/ui/sonner'
 import { BottomNav } from '@/components/BottomNav'
@@ -10,6 +10,15 @@ import { ProgramsPage } from '@/pages/Programs'
 import { TrendsPage } from '@/pages/Trends'
 import { SettingsPage } from '@/pages/Settings'
 
+/** Jump to the top whenever the route changes — a tapped card opens at the top. */
+function ScrollToTop() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
+  return null
+}
+
 export default function App() {
   const darkMode = useLiveQuery(async () => (await getSettings())?.darkMode ?? false, [])
 
@@ -19,6 +28,7 @@ export default function App() {
 
   return (
     <HashRouter>
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<Today />} />
         <Route path="/exercise/:programId/:itemId" element={<ExerciseDetail />} />
