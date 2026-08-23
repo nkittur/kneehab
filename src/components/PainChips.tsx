@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Minus, Plus } from 'lucide-react'
 import { upsertDailyLog, type DailyLog, type PainScores } from '@/lib/db'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -59,29 +58,13 @@ function PainChip({ date, log, area }: { date: string; log?: DailyLog; area: { i
   )
 }
 
-/** Quick symptom row: per-area pain chips plus the knee pop counter. */
+/** Quick symptom row: per-area pain chips. */
 export function PainChips({ date, log }: { date: string; log?: DailyLog }) {
-  const pops = log?.pops ?? 0
   return (
     <div className="flex flex-wrap items-center gap-2">
       {AREAS.map(a => (
         <PainChip key={a.id} date={date} log={log} area={a} />
       ))}
-      <div className="ml-auto flex items-center gap-1">
-        <Button
-          variant="outline"
-          size="icon-sm"
-          disabled={pops <= 0}
-          aria-label="Remove a pop"
-          onClick={() => upsertDailyLog(date, { pops: Math.max(0, pops - 1) })}
-        >
-          <Minus />
-        </Button>
-        <Button size="sm" className="gap-1" onClick={() => upsertDailyLog(date, { pops: pops + 1 })}>
-          <Plus /> pop
-        </Button>
-        <span className="w-5 text-right text-sm tabular-nums text-muted-foreground">{pops}</span>
-      </div>
     </div>
   )
 }
