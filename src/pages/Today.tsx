@@ -7,7 +7,6 @@ import { APP_NAME } from '@/lib/brand'
 import { areaLabel, programColor } from '@/lib/programColors'
 import type { Bucket, ProgramId, WorkoutSize } from '@/programs/types'
 import { ProgressRing } from '@/components/ProgressRing'
-import { PainChips } from '@/components/PainChips'
 import { PlanCard } from '@/components/PlanCard'
 import { WorkoutSizeControl } from '@/components/WorkoutSizeControl'
 import { Button } from '@/components/ui/button'
@@ -217,12 +216,6 @@ export function Today() {
           </p>
         </div>
       </div>
-
-      <Card>
-        <CardContent className="p-3">
-          <PainChips date={date} log={log} />
-        </CardContent>
-      </Card>
 
       {visible.map(section => {
         const entries = plan.buckets[section.bucket]
