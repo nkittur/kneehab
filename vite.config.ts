@@ -13,9 +13,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Kneehab',
-        short_name: 'Kneehab',
-        description: 'PFPS knee rehab tracker',
+        name: 'Durable',
+        short_name: 'Durable',
+        description: 'Training, rehab and durability planner',
         theme_color: '#0a0a0a',
         background_color: '#0a0a0a',
         display: 'standalone',

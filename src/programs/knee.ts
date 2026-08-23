@@ -1,0 +1,283 @@
+import type { Exercise, ProgramDef, ProtocolItem } from './types'
+
+/**
+ * Knee (PFPS) — ported from the original kneehab protocol in `src/lib/protocol.ts`.
+ * The legacy file stays as-is until the UI moves over to the registry.
+ */
+
+export const kneeExercises: Record<string, Exercise> = {
+  clamshells: {
+    id: 'clamshells',
+    name: 'Clamshells',
+    targetArea: 'Glute medius',
+    cue: "Isolate Glute Medius. Don't roll pelvis back.",
+    instructions:
+      'Lie on your side, knees bent ~45°, stacked. Keep feet together and lift the top knee by rotating at the hip. Do not let the pelvis roll backward.',
+    images: ['clamshells.gif'],
+    contextTag: 'floor',
+    equipment: [],
+    commonMistakes: ['Rolling the pelvis backward to get more range'],
+    progression: 'Add a mini-band above the knees.',
+  },
+  slr_out: {
+    id: 'slr_out',
+    name: 'Straight Leg Raises (Outward Turn)',
+    targetArea: 'VMO',
+    cue: 'Rotate leg 30° outward. Target VMO.',
+    instructions:
+      'Lie on your back with the opposite knee bent. Rotate the working leg ~30° outward, lock the knee, and lift ~12" off the floor. Lower slowly.',
+    images: ['slr-out.gif'],
+    contextTag: 'floor',
+    equipment: [],
+    commonMistakes: ['Letting the knee unlock', 'Swinging the leg up fast'],
+    progression: 'Add an ankle weight.',
+  },
+  hip_flexor_stretch: {
+    id: 'hip_flexor_stretch',
+    name: 'Kneeling Hip Flexor Stretch',
+    targetArea: 'Hip flexors',
+    cue: 'Push hips forward, chest tall.',
+    instructions:
+      'Kneel on one knee with the other foot forward. Tuck the pelvis under and press hips forward. Keep chest tall.',
+    images: ['hip-flexor-stretch.gif'],
+    contextTag: 'floor',
+    equipment: [],
+    commonMistakes: ['Arching the low back instead of tucking the pelvis'],
+  },
+  itb_foam_roll: {
+    id: 'itb_foam_roll',
+    name: 'IT Band Foam Rolling',
+    targetArea: 'Lateral thigh',
+    cue: 'Avoid rolling directly over the joint.',
+    instructions:
+      'Lie on your side on a foam roller along the outer thigh between hip and knee. Roll slowly. Do not roll over the knee joint itself.',
+    images: ['itb-foam.gif'],
+    contextTag: 'floor',
+    equipment: ['foam-roller'],
+    commonMistakes: ['Rolling over the knee joint itself'],
+  },
+  banded_lat_walks: {
+    id: 'banded_lat_walks',
+    name: 'Banded Lateral Walks',
+    targetArea: 'Glute medius',
+    cue: 'Do not let knees cave inward.',
+    instructions:
+      'Loop a mini-band above knees or at ankles. Quarter-squat stance. Step sideways keeping tension on the band. Knees out.',
+    images: ['banded-lateral-walks.gif'],
+    contextTag: 'standing',
+    equipment: ['band'],
+    commonMistakes: ['Knees caving inward', 'Standing too upright'],
+    progression: 'Move the band to the ankles, or use a heavier band.',
+    regression: 'Band above the knees, shorter steps.',
+  },
+  step_downs: {
+    id: 'step_downs',
+    name: 'Controlled Step-Downs',
+    targetArea: 'Quad · patellar tendon',
+    cue: 'Watch knee in mirror. NO valgus (caving).',
+    instructions:
+      'Stand on a step. Slowly lower the non-working heel toward the floor, then return. Keep working knee tracking over the middle toes.',
+    images: ['step-downs.gif'],
+    contextTag: 'standing',
+    equipment: ['step'],
+    commonMistakes: ['Knee caving inward', 'Dropping instead of lowering'],
+    progression: 'Raise the step height, then add dumbbells.',
+    regression: 'Lower step, hold a rail for balance.',
+  },
+  wall_sits_ball: {
+    id: 'wall_sits_ball',
+    name: 'Wall Sits with Ball',
+    targetArea: 'VMO',
+    cue: 'Squeeze ball to fire VMO.',
+    instructions:
+      'Back against wall, knees ~90°. Place a small ball between knees and squeeze continuously throughout the hold.',
+    images: ['wall-sit-ball.gif'],
+    contextTag: 'standing',
+    equipment: ['ball'],
+    commonMistakes: ['Letting the squeeze go slack mid-hold'],
+    regression: 'Shallower knee angle, shorter holds.',
+  },
+  skater_stops: {
+    id: 'skater_stops',
+    name: 'Skater Stops',
+    targetArea: 'Reactive landing',
+    cue: 'Freeze on landing. Knee over shoelaces.',
+    instructions:
+      'Bound laterally from one leg to the other, freezing on landing for 1–2 seconds. Knee tracks over middle toes; no caving.',
+    images: ['skater-stops.gif'],
+    contextTag: 'sweat',
+    equipment: [],
+    commonMistakes: ['Not holding the landing', 'Knee caving on the catch'],
+    progression: 'Bound further; add a head turn or ball catch.',
+    regression: 'Step laterally instead of bounding.',
+  },
+  ice: {
+    id: 'ice',
+    name: 'Ice Therapy',
+    targetArea: 'Knee',
+    cue: 'Apply if throbbing or heat is felt.',
+    instructions: 'Ice the knee for 15 minutes after sport if you feel throbbing or heat.',
+    images: ['ice.gif'],
+    contextTag: 'couch',
+    equipment: ['ice-pack'],
+  },
+}
+
+const phase1Items: ProtocolItem[] = [
+  {
+    id: 'p1-clam',
+    exerciseId: 'clamshells',
+    sets: 3,
+    reps: 15,
+    displayAmount: '15 per side',
+    frequency: { perWeek: 'daily' },
+    bucket: 'couch',
+    tissues: ['glutes'],
+  },
+  {
+    id: 'p1-slr',
+    exerciseId: 'slr_out',
+    sets: 3,
+    reps: 12,
+    displayAmount: '12 reps',
+    frequency: { perWeek: 'daily' },
+    bucket: 'couch',
+    tissues: ['quads'],
+  },
+  {
+    id: 'p1-hip',
+    exerciseId: 'hip_flexor_stretch',
+    sets: 3,
+    durationSeconds: 30,
+    displayAmount: '30s hold',
+    frequency: { perWeek: 'daily' },
+    bucket: 'couch',
+  },
+  {
+    id: 'p1-itb',
+    exerciseId: 'itb_foam_roll',
+    sets: 1,
+    durationSeconds: 150,
+    displayAmount: '2–3 min',
+    frequency: { perWeek: 'daily' },
+    bucket: 'couch',
+  },
+]
+
+const phase2Items: ProtocolItem[] = [
+  {
+    id: 'p2-band',
+    exerciseId: 'banded_lat_walks',
+    sets: 3,
+    reps: 15,
+    displayAmount: '15 steps per side',
+    frequency: { perWeek: 'daily' },
+    bucket: 'quick',
+    tissues: ['glutes'],
+  },
+  {
+    id: 'p2-step',
+    exerciseId: 'step_downs',
+    sets: 3,
+    reps: 10,
+    displayAmount: '10 slow reps',
+    frequency: { perWeek: 3 },
+    minSpacingDays: 2,
+    bucket: 'workout',
+    workoutSizes: ['S', 'M', 'L'],
+    tissues: ['quads', 'patellar-tendon'],
+    intensity: 'hard',
+  },
+  {
+    id: 'p2-wall',
+    exerciseId: 'wall_sits_ball',
+    sets: 3,
+    durationSeconds: 40,
+    displayAmount: '30–45s hold',
+    frequency: { perWeek: 'daily' },
+    bucket: 'quick',
+    tissues: ['quads'],
+  },
+  {
+    id: 'p2-skat',
+    exerciseId: 'skater_stops',
+    sets: 3,
+    reps: 8,
+    displayAmount: '8 per side',
+    frequency: { perWeek: 3 },
+    minSpacingDays: 2,
+    bucket: 'workout',
+    workoutSizes: ['M', 'L'],
+    tissues: ['quads', 'achilles-calf'],
+    intensity: 'hard',
+  },
+]
+
+export const kneeProgram: ProgramDef = {
+  id: 'knee',
+  name: 'Knee (PFPS)',
+  priority: 20,
+  phases: [
+    {
+      id: 'phase1',
+      name: 'Phase 1 — Foundation',
+      exitCriteria:
+        'Two weeks of consistent work with pain ≤3 during daily activity; no swelling after sessions.',
+      items: phase1Items,
+      checkInQuestions: [
+        { id: 'pain_daily', label: 'Knee pain during normal activity (0–10)', type: 'pain0to10' },
+        { id: 'pain_stairs', label: 'Knee pain descending stairs (0–10)', type: 'pain0to10' },
+        { id: 'swelling', label: 'Swelling-free after sessions?', type: 'yesNo' },
+      ],
+    },
+    {
+      id: 'phase2',
+      name: 'Phase 2 — Loading',
+      entryCriteria: 'Phase 1 exit criteria met (typically after week 2).',
+      exitCriteria:
+        'Full-depth step-downs and skater stops with no valgus and pain ≤2 the day after sport.',
+      items: phase2Items,
+      checkInQuestions: [
+        { id: 'pain_daily', label: 'Knee pain during normal activity (0–10)', type: 'pain0to10' },
+        { id: 'pain_after_sport', label: 'Knee pain the day after sport (0–10)', type: 'pain0to10' },
+        { id: 'valgus_free', label: 'Step-downs valgus-free?', type: 'yesNo' },
+      ],
+    },
+  ],
+  pregameItems: [
+    {
+      id: 'pg-clam',
+      exerciseId: 'clamshells',
+      sets: 1,
+      reps: 15,
+      displayAmount: '15 per side',
+      frequency: { perWeek: 'daily' },
+      bucket: 'quick',
+      tissues: ['glutes'],
+      notes: 'Wake up the brakes.',
+    },
+    {
+      id: 'pg-band',
+      exerciseId: 'banded_lat_walks',
+      sets: 1,
+      reps: 15,
+      displayAmount: '15 steps per side',
+      frequency: { perWeek: 'daily' },
+      bucket: 'quick',
+      tissues: ['glutes'],
+      notes: 'Prime the hips for pivots.',
+    },
+  ],
+  postgameItems: [
+    {
+      id: 'post-ice',
+      exerciseId: 'ice',
+      sets: 1,
+      durationSeconds: 900,
+      displayAmount: '15 min',
+      frequency: { perWeek: 'daily' },
+      bucket: 'couch',
+      notes: 'Apply if throbbing or heat is felt.',
+    },
+  ],
+}
