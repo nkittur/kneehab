@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ChevronDown, Undo2 } from 'lucide-react'
+import { Undo2 } from 'lucide-react'
 import { clearPlanDeviation, db, todayISO, upsertDailyLog } from '@/lib/db'
-import type { PlanEntry } from '@/lib/planner'
-import { entryKey, itemName, useDayPlan } from '@/lib/useDayPlan'
+import { entryKey, itemName, useDayPlan, type ResolvedEntry } from '@/lib/useDayPlan'
 import { APP_NAME } from '@/lib/brand'
-import type { Bucket, WorkoutSize } from '@/programs/types'
+import { areaLabel, programColor } from '@/lib/programColors'
+import type { Bucket, ProgramId, WorkoutSize } from '@/programs/types'
 import { ProgressRing } from '@/components/ProgressRing'
 import { PainChips } from '@/components/PainChips'
 import { PlanCard } from '@/components/PlanCard'
@@ -61,41 +61,63 @@ function ContextPicker({ value, onChange }: { value: View; onChange: (v: View) =
   )
 }
 
-/** Collapsed-by-default list of items that are legal now but not due. */
-function MoreOptions({
-  title,
-  entries,
-  date,
-  doneSets,
-}: {
-  title: string
-  entries: PlanEntry[]
-  date: string
-  doneSets: Map<string, Set<number>>
-}) {
-  const [open, setOpen] = useState(false)
-  if (entries.length === 0) return null
+/** Cards for one area (program) inside a location, already in the order to do them. */
+type AreaGroup = { programId: ProgramId; label: string; entries: ResolvedEntry[] }
 
+/** Everything ticked off for today — same rule the card itself uses to dim. */
+function isFinished(entry: ResolvedEntry, doneSets: Map<string, Set<number>>): boolean {
+  const done = doneSets.get(entryKey(entry.programId, entry.itemId))
+  return entry.completedToday || (done?.size ?? 0) >= entry.item.sets
+}
+
+/**
+ * Order inside an area: what to do next first (urgent ahead of the rest),
+ * then work already finished today, then extras that were never due.
+ */
+function rankOf(entry: ResolvedEntry, doneSets: Map<string, Set<number>>): number {
+  if (entry.extra) return 3
+  if (isFinished(entry, doneSets)) return 2
+  return entry.urgent ? 0 : 1
+}
+
+/**
+ * Split a location's cards by what they help. Groups follow program priority
+ * (the acute rehab leads); inside a group, authored order breaks rank ties.
+ */
+function groupByArea(entries: ResolvedEntry[], doneSets: Map<string, Set<number>>): AreaGroup[] {
+  const byProgram = new Map<ProgramId, { priority: number; name: string; entries: ResolvedEntry[] }>()
+  for (const entry of entries) {
+    const group =
+      byProgram.get(entry.programId) ?? { priority: entry.priority, name: entry.programName, entries: [] }
+    group.entries.push(entry)
+    byProgram.set(entry.programId, group)
+  }
+
+  return [...byProgram]
+    .sort((a, b) => a[1].priority - b[1].priority)
+    .map(([programId, group]) => ({
+      programId,
+      label: areaLabel(programId, group.name),
+      entries: group.entries
+        .map((entry, i) => ({ entry, i, rank: rankOf(entry, doneSets) }))
+        .sort((a, b) => a.rank - b.rank || a.i - b.i)
+        .map(x => x.entry),
+    }))
+}
+
+/** Small coloured label naming what this handful of cards helps. */
+function AreaHeader({ programId, label }: { programId: ProgramId; label: string }) {
   return (
-    <div className="space-y-2 pt-1">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
-        className="flex w-full items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+    <div className="flex items-center gap-2 pt-1">
+      <span
+        className={cn(
+          'rounded-full px-2 py-0.5 text-[11px] font-medium leading-4',
+          programColor(programId).chip,
+        )}
       >
-        <ChevronDown className={cn('size-3.5 transition-transform', open && 'rotate-180')} />
-        More {title.toLowerCase()} options ({entries.length})
-      </button>
-      {open &&
-        entries.map(entry => (
-          <PlanCard
-            key={entryKey(entry.programId, entry.itemId)}
-            entry={entry}
-            date={date}
-            doneSets={doneSets.get(entryKey(entry.programId, entry.itemId)) ?? new Set()}
-          />
-        ))}
+        {label}
+      </span>
+      <span className="h-px flex-1 bg-border" />
     </div>
   )
 }
@@ -160,7 +182,7 @@ export function Today() {
     day: 'numeric',
   })
   // In All, empty sections are hidden. Picking a context always shows that one
-  // section, so its "more options" list stays reachable on a quiet day.
+  // section, so everything doable there stays reachable on a quiet day.
   const visible =
     view === 'all'
       ? SECTIONS.filter(s => plan.buckets[s.bucket].length > 0 || plan.skipped[s.bucket].length > 0)
@@ -205,6 +227,14 @@ export function Today() {
       {visible.map(section => {
         const entries = plan.buckets[section.bucket]
         const skipped = plan.skipped[section.bucket]
+        // A location view shows everything you could do there, extras included
+        // and filed under their area. All is the day's plan, so extras stay out.
+        const planned = new Set(entries.map(e => entryKey(e.programId, e.itemId)))
+        const extras =
+          view === 'all'
+            ? []
+            : browse[section.bucket].filter(e => !planned.has(entryKey(e.programId, e.itemId)))
+        const groups = groupByArea([...entries, ...extras], plan.doneSets)
         return (
           <section key={section.bucket} className="space-y-2">
             <div className="flex items-center justify-between gap-2">
@@ -219,19 +249,22 @@ export function Today() {
               )}
             </div>
 
-            {entries.map(entry => (
-              <PlanCard
-                key={entryKey(entry.programId, entry.baseItemId ?? entry.itemId)}
-                entry={entry}
-                date={date}
-                doneSets={plan.doneSets.get(entryKey(entry.programId, entry.itemId)) ?? new Set()}
-              />
+            {groups.map(group => (
+              <div key={group.programId} className="space-y-2">
+                <AreaHeader programId={group.programId} label={group.label} />
+                {group.entries.map(entry => (
+                  <PlanCard
+                    key={entryKey(entry.programId, entry.baseItemId ?? entry.itemId)}
+                    entry={entry}
+                    date={date}
+                    doneSets={plan.doneSets.get(entryKey(entry.programId, entry.itemId)) ?? new Set()}
+                  />
+                ))}
+              </div>
             ))}
 
-            {view !== 'all' && entries.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                Nothing due here right now — browse the options below if you want more.
-              </p>
+            {view !== 'all' && groups.length === 0 && (
+              <p className="text-sm text-muted-foreground">Nothing you can do here right now.</p>
             )}
 
             {skipped.length > 0 && (
@@ -251,15 +284,6 @@ export function Today() {
                   </button>
                 ))}
               </div>
-            )}
-
-            {view !== 'all' && (
-              <MoreOptions
-                title={section.title}
-                entries={browse[section.bucket]}
-                date={date}
-                doneSets={plan.doneSets}
-              />
             )}
           </section>
         )

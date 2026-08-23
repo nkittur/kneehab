@@ -15,7 +15,6 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { ProgramBadge } from '@/components/ProgramBadge'
 import { cn } from '@/lib/utils'
 
 export function PlanCard({
@@ -105,8 +104,8 @@ export function PlanCard({
             onPointerLeave={endPress}
           >
             <div className="flex flex-wrap items-center gap-1.5">
+              {/* No program chip here: Today files every card under an area heading. */}
               <span className={cn('font-medium', done && 'line-through')}>{itemName(item)}</span>
-              <ProgramBadge programId={entry.programId} name={entry.programName} />
               {entry.extra && (
                 <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] leading-4 text-muted-foreground">
                   extra

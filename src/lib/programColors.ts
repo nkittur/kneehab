@@ -17,3 +17,22 @@ export const PROGRAM_COLORS: Record<ProgramId, { chip: string; dot: string; hex:
 export function programColor(id: ProgramId) {
   return PROGRAM_COLORS[id] ?? PROGRAM_COLORS.body
 }
+
+/**
+ * What a program is *for*, in the words the user thinks in. Today groups its
+ * cards under these, so the label answers "what will this help?" rather than
+ * naming the program.
+ */
+export const AREA_LABEL: Record<ProgramId, string> = {
+  tibant: 'Shin tendon',
+  knee: 'Knee',
+  wrist: 'Wrist',
+  fingers: 'Fingers',
+  strength: 'Strength',
+  cardio: 'Cardio',
+  body: 'Body',
+}
+
+export function areaLabel(id: ProgramId, fallback: string): string {
+  return AREA_LABEL[id] ?? fallback
+}
