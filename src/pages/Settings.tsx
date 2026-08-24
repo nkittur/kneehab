@@ -5,7 +5,8 @@ import { db, getSettings, todayISO, type Settings } from '@/lib/db'
 import { copyExportToClipboard, downloadBackup, importJSON } from '@/lib/backup'
 import { allEquipmentKeys, equipmentLabel } from '@/lib/equipment'
 import { APP_NAME } from '@/lib/brand'
-import type { WorkoutSize } from '@/programs/types'
+import { DEFAULT_BUDGET_MINUTES } from '@/lib/planner'
+import type { Bucket, WorkoutSize } from '@/programs/types'
 import { WorkoutSizeControl } from '@/components/WorkoutSizeControl'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -14,6 +15,13 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
+
+/** The three daily windows the planner budgets against. */
+const BUDGETS = [
+  { bucket: 'couch', key: 'couchBudgetMinutes', label: 'Couch' },
+  { bucket: 'quick', key: 'quickBudgetMinutes', label: 'Quick' },
+  { bucket: 'workout', key: 'workoutBudgetMinutes', label: 'Workout' },
+] as const satisfies readonly { bucket: Bucket; key: keyof Settings; label: string }[]
 
 function SettingsCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -34,6 +42,14 @@ export function SettingsPage() {
 
   async function patch(p: Partial<Settings>) {
     await db.settings.put({ ...settings!, ...p })
+  }
+
+  /** Empty clears the override, so the planner's default takes over again. */
+  async function setBudget(key: (typeof BUDGETS)[number]['key'], raw: string) {
+    const n = Number(raw)
+    const next: Partial<Settings> = {}
+    next[key] = raw.trim() === '' || !Number.isFinite(n) ? undefined : Math.max(0, Math.round(n))
+    await patch(next)
   }
 
   async function onImport(f: File) {
@@ -120,6 +136,54 @@ export function SettingsPage() {
             The planner keeps heavy lower-body work off the day before these.
           </p>
         </div>
+      </SettingsCard>
+
+      <SettingsCard title="Time you have">
+        <div className="flex gap-2">
+          {BUDGETS.map(b => (
+            <div key={b.key} className="flex-1 space-y-1">
+              <Label htmlFor={b.key} className="text-xs text-muted-foreground">
+                {b.label}
+              </Label>
+              <Input
+                id={b.key}
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={240}
+                placeholder={String(DEFAULT_BUDGET_MINUTES[b.bucket])}
+                value={settings[b.key] ?? ''}
+                onChange={e => setBudget(b.key, e.target.value)}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="ramp">Ramp-in (first weeks lighter)</Label>
+          <div className="flex gap-1">
+            <Button
+              id="ramp"
+              size="sm"
+              variant={settings.rampEnabled === false ? 'outline' : 'default'}
+              onClick={() => patch({ rampEnabled: true })}
+            >
+              On
+            </Button>
+            <Button
+              size="sm"
+              variant={settings.rampEnabled === false ? 'default' : 'outline'}
+              onClick={() => patch({ rampEnabled: false })}
+            >
+              Off
+            </Button>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Minutes per day in each place (defaults{' '}
+          {BUDGETS.map(b => DEFAULT_BUDGET_MINUTES[b.bucket]).join(' / ')}). The plan is filled from the
+          top of each list until the time runs out — shin rehab is never trimmed. Ramp-in spends 60% of
+          these budgets in week one, 75% in week two, 90% in week three.
+        </p>
       </SettingsCard>
 
       <SettingsCard title="Equipment you own">

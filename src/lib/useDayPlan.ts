@@ -1,7 +1,9 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
+  bucketMinutes,
   buildBrowse,
   buildPlan,
+  DEFAULT_BUDGET_MINUTES,
   type DayContext,
   type DayPlan,
   type PlanEntry,
@@ -45,6 +47,8 @@ export type ResolvedPlan = {
   doneSets: Map<string, Set<number>>
   plannedSets: number
   completedSets: number
+  /** Estimated minutes per bucket, recounted after skips and swaps. */
+  minutes: Record<Bucket, number>
 }
 
 export const entryKey = (programId: string, itemId: string) => `${programId}:${itemId}`
@@ -99,7 +103,11 @@ export function applyDeviations(
 
   let plannedSets = 0
   let completedSets = 0
+  const minutes: Record<Bucket, number> = { couch: 0, quick: 0, workout: 0 }
   for (const bucket of Object.keys(buckets) as Bucket[]) {
+    // Recomputed rather than taken from plan.minutes: a skip or a swap changes
+    // what the bucket actually costs.
+    minutes[bucket] = bucketMinutes(buckets[bucket])
     for (const entry of buckets[bucket]) {
       plannedSets += entry.item.sets
       const done = doneSets.get(entryKey(entry.programId, entry.itemId))
@@ -107,7 +115,7 @@ export function applyDeviations(
     }
   }
 
-  return { date: plan.date, buckets, skipped, doneSets, plannedSets, completedSets }
+  return { date: plan.date, buckets, skipped, doneSets, plannedSets, completedSets, minutes }
 }
 
 export type DayPlanQuery = {
@@ -155,6 +163,11 @@ export function useDayPlan(date: string): DayPlanQuery {
     equipment: settings.equipment,
     defaultWorkoutSize: settings.defaultWorkoutSize,
     sportDaysHint: settings.sportDaysHint,
+    // Budgets are opt-in in the pure engine; the app always supplies them.
+    couchBudgetMinutes: settings.couchBudgetMinutes ?? DEFAULT_BUDGET_MINUTES.couch,
+    quickBudgetMinutes: settings.quickBudgetMinutes ?? DEFAULT_BUDGET_MINUTES.quick,
+    workoutBudgetMinutes: settings.workoutBudgetMinutes ?? DEFAULT_BUDGET_MINUTES.workout,
+    rampEnabled: settings.rampEnabled,
   }
   const context: DayContext = {
     sportToday: log?.sportDay ?? log?.isSportDay ?? false,

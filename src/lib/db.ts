@@ -79,6 +79,15 @@ export type Settings = {
   defaultWorkoutSize?: WorkoutSize
   /** v2: weekdays (0=Sun) the user usually plays sport. */
   sportDaysHint?: number[]
+  /**
+   * Minutes available per bucket on a normal day. Absent = the planner's
+   * defaults (30 / 10 / 30); no migration needed, the fields are additive.
+   */
+  couchBudgetMinutes?: number
+  quickBudgetMinutes?: number
+  workoutBudgetMinutes?: number
+  /** Ramp the budgets down over the first three weeks. Absent = on. */
+  rampEnabled?: boolean
 }
 
 export type { ProgramState }

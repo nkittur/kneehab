@@ -3,6 +3,8 @@ import {
   buildBrowse,
   buildPlan,
   countCompletionsThisWeek,
+  estimateMinutes,
+  rampFactor,
   hardDaysThisWeek,
   isFrequencySatisfiable,
   isHardDayCapReached,
@@ -856,5 +858,168 @@ describe('real registry — every-other-day loading', () => {
     expect(ids(buildPlan(MON, PROGRAMS, wristOnly, empty).buckets.couch)).toContain('w2-ext-curl')
     expect(ids(buildPlan(TUE, PROGRAMS, wristOnly, history).buckets.couch)).not.toContain('w2-ext-curl')
     expect(ids(buildPlan(WED, PROGRAMS, wristOnly, history).buckets.couch)).toContain('w2-ext-curl')
+  })
+})
+
+describe('time budget and ramp', () => {
+  // couch items: 3 sets × 10 reps ≈ 3.5 min each (see estimateMinutes)
+  const shin: ProgramDef = {
+    id: 'tibant',
+    name: 'Shin',
+    priority: 5,
+    phases: [
+      { id: 'p', name: 'P', exitCriteria: 'n/a', items: [item({ id: 't-iso', bucket: 'couch' })] },
+    ],
+  }
+  const gym: ProgramDef = {
+    id: 'strength',
+    name: 'Gym',
+    priority: 50,
+    phases: [
+      {
+        id: 'p',
+        name: 'P',
+        exitCriteria: 'n/a',
+        items: [
+          item({ id: 's-a', bucket: 'couch' }),
+          item({ id: 's-b', bucket: 'couch' }),
+          item({ id: 's-c', bucket: 'couch' }),
+        ],
+      },
+    ],
+  }
+  const reg: PartialProgramRegistry = { tibant: shin, strength: gym }
+  const both: ProgramState[] = [
+    { programId: 'tibant', phase: 'p', startedPhaseAt: MON },
+    { programId: 'strength', phase: 'p', startedPhaseAt: MON },
+  ]
+  const gymOnly: ProgramState[] = [both[1]]
+  const noRamp = { rampEnabled: false }
+
+  describe('estimateMinutes', () => {
+    it('estimates rep items, duration items and long cardio sessions', () => {
+      // 3×(10 reps × 4s) + 2×30s rest + 20s setup = 200s → 3.5 min
+      expect(estimateMinutes(item({ id: 'r', sets: 3, reps: 10 }))).toBe(3.5)
+      // 3×45s + 2×30s + 20s = 215s → 4 min
+      expect(estimateMinutes(item({ id: 'd', sets: 3, reps: undefined, durationSeconds: 45 }))).toBe(4)
+      // one 30-min block + 60s setup, no rest padding
+      expect(estimateMinutes(item({ id: 'c', sets: 1, reps: undefined, durationSeconds: 1800 }))).toBe(31)
+    })
+  })
+
+  describe('bucket budgets', () => {
+    it('is opt-in: no configured budget leaves the bucket whole', () => {
+      const plan = buildPlan(MON, reg, gymOnly, empty, noRamp)
+      expect(ids(plan.buckets.couch)).toEqual(['s-a', 's-b', 's-c'])
+    })
+
+    it('fills in order and trims from the bottom, whole items only', () => {
+      const plan = buildPlan(MON, reg, gymOnly, empty, { ...noRamp, couchBudgetMinutes: 8 })
+      expect(ids(plan.buckets.couch)).toEqual(['s-a', 's-b']) // 7 min fits, 10.5 does not
+      expect(plan.minutes.couch).toBe(7)
+    })
+
+    it('always keeps the first item even when it alone busts the budget', () => {
+      const plan = buildPlan(MON, reg, gymOnly, empty, { ...noRamp, couchBudgetMinutes: 1 })
+      expect(ids(plan.buckets.couch)).toEqual(['s-a'])
+    })
+
+    it('never trims tibant work, and charges it to the budget first', () => {
+      const plan = buildPlan(MON, reg, both, empty, { ...noRamp, couchBudgetMinutes: 8 })
+      // tibant's 3.5 min come off the top; only one gym item still fits.
+      expect(ids(plan.buckets.couch)).toEqual(['t-iso', 's-a'])
+    })
+
+    it('keeps an item completed today even when over budget', () => {
+      const history: PlannerHistory = {
+        completions: [
+          { date: MON, programId: 'strength', itemId: 's-b' },
+          { date: MON, programId: 'strength', itemId: 's-c' },
+        ],
+      }
+      const plan = buildPlan(MON, reg, gymOnly, history, { ...noRamp, couchBudgetMinutes: 1 })
+      const kept = ids(plan.buckets.couch)
+      expect(kept).toContain('s-b')
+      expect(kept).toContain('s-c')
+    })
+
+    it('hands budget-trimmed items to buildBrowse as extras', () => {
+      const settings = { ...noRamp, couchBudgetMinutes: 8 }
+      const extras = buildBrowse(MON, reg, gymOnly, empty, settings, {}, 'couch')
+      expect(ids(extras)).toEqual(['s-c'])
+      expect(extras[0].extra).toBe(true)
+    })
+  })
+
+  describe('rampFactor', () => {
+    const day = (n: number) => {
+      const d = new Date(MON + 'T00:00:00')
+      d.setDate(d.getDate() + n)
+      return d.toISOString().slice(0, 10)
+    }
+    // A user who trains steadily: first completion on MON, latest one yesterday.
+    const active = (probeDay: number): PlannerHistory => ({
+      completions: [
+        { date: MON, programId: 'strength', itemId: 's-a' },
+        { date: day(Math.max(0, probeDay - 1)), programId: 'strength', itemId: 's-a' },
+      ],
+    })
+
+    it('starts at 0.6 with no history at all', () => {
+      expect(rampFactor(MON, empty)).toBe(0.6)
+    })
+
+    it('steps 0.6 → 0.75 → 0.9 → 1.0 at days 7, 14 and 21 while training continues', () => {
+      for (const [n, factor] of [
+        [0, 0.6],
+        [6, 0.6],
+        [7, 0.75],
+        [13, 0.75],
+        [14, 0.9],
+        [20, 0.9],
+        [21, 1],
+      ] as const) {
+        expect(rampFactor(day(n), active(n)), `day ${n}`).toBe(factor)
+      }
+    })
+
+    it('restarts at 0.6 after a 14-day layoff', () => {
+      expect(rampFactor(day(21), active(21))).toBe(1)
+      // program just as old, but the latest completion is ≥14 days back
+      expect(rampFactor(day(35), active(21))).toBe(0.6)
+    })
+
+    it('scales the budget: week-one 0.6 × 10 min keeps one 3.5-min item', () => {
+      const plan = buildPlan(MON, reg, gymOnly, empty, { couchBudgetMinutes: 10 })
+      expect(ids(plan.buckets.couch)).toEqual(['s-a']) // 2 items = 7 min > 6
+      const off = buildPlan(MON, reg, gymOnly, empty, { couchBudgetMinutes: 10, rampEnabled: false })
+      expect(ids(off.buckets.couch)).toEqual(['s-a', 's-b'])
+    })
+  })
+
+  it('real registry: default budgets shrink the fresh-install day dramatically', () => {
+    const fresh: ProgramState[] = [
+      { programId: 'tibant', phase: 'phaseA', startedPhaseAt: MON },
+      { programId: 'knee', phase: 'phase1', startedPhaseAt: MON },
+      { programId: 'wrist', phase: 'phase1', startedPhaseAt: MON },
+      { programId: 'fingers', phase: 'base', startedPhaseAt: MON },
+      { programId: 'strength', phase: 'ongoing', startedPhaseAt: MON },
+      { programId: 'cardio', phase: 'ongoing', startedPhaseAt: MON },
+    ]
+    const unbudgeted = buildPlan(MON, PROGRAMS, fresh, empty)
+    const budgeted = buildPlan(MON, PROGRAMS, fresh, empty, {
+      couchBudgetMinutes: 30,
+      quickBudgetMinutes: 10,
+      workoutBudgetMinutes: 30,
+    })
+    const sets = (p: ReturnType<typeof buildPlan>) =>
+      Object.values(p.buckets)
+        .flat()
+        .reduce((n, e) => n + e.item.sets, 0)
+    expect(sets(budgeted)).toBeLessThan(sets(unbudgeted) / 2)
+    // Couch stays within the ramped window plus the untrimmable tibant work.
+    expect(budgeted.minutes.couch).toBeLessThanOrEqual(
+      18 + buildPlan(MON, PROGRAMS, [fresh[0]], empty).minutes.couch + 4,
+    )
   })
 })

@@ -292,6 +292,8 @@ export function Today() {
     const inArea = (programId: ProgramId) => activeArea === 'all' || programId === activeArea
     return {
       section,
+      // What the *plan* costs — extras on offer are not part of the budget.
+      minutes: Math.round(plan.minutes[section.bucket]),
       groups: groupByArea([...entries, ...extras], plan.doneSets).filter(g => inArea(g.programId)),
       skipped: plan.skipped[section.bucket].filter(e => inArea(e.programId)),
     }
@@ -335,12 +337,13 @@ export function Today() {
         </div>
       </div>
 
-      {visible.map(({ section, groups, skipped }) => (
+      {visible.map(({ section, minutes, groups, skipped }) => (
         <section key={section.bucket} className="space-y-2">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-baseline gap-2">
               <span className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
                 {section.emoji} {section.title}
+                {minutes > 0 && <> · ~{minutes} min</>}
               </span>
               <span className="text-xs text-muted-foreground">{section.hint}</span>
             </div>

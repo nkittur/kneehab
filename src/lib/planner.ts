@@ -35,6 +35,8 @@ export type PlanEntry = {
 export type DayPlan = {
   date: string // YYYY-MM-DD
   buckets: Record<Bucket, PlanEntry[]>
+  /** Estimated minutes of work planned in each bucket (see `estimateMinutes`). */
+  minutes: Record<Bucket, number>
 }
 
 /** One recorded completion of a protocol item. */
@@ -57,6 +59,14 @@ export type PlannerSettings = {
   defaultWorkoutSize?: WorkoutSize
   /** Weekdays (0 = Sunday) the user usually plays sport. */
   sportDaysHint?: number[]
+  /** Minutes the user has for couch work on a normal day. */
+  couchBudgetMinutes?: number
+  /** Minutes for the standing odds and ends. */
+  quickBudgetMinutes?: number
+  /** Minutes for the day's workout / cardio block. */
+  workoutBudgetMinutes?: number
+  /** Ramp the budgets down for the first three weeks. Defaults to on. */
+  rampEnabled?: boolean
 }
 
 /** What the caller knows about *this* day that history cannot tell us. */
@@ -398,6 +408,149 @@ export function isUrgent(
   return remainingQuota >= remainingLegalDays(item, dateISO, history, settings)
 }
 
+// ── Time budget ───────────────────────────────────────────────────────
+//
+// The day has a shape: roughly half an hour on the couch, ten standing
+// minutes, half an hour for a workout. Everything below turns that into a
+// filter, so the plan is what actually fits rather than everything that is
+// legal (day one, unbudgeted, offered ~200 sets).
+
+/** Seconds a rep takes, averaged over tempo work and quick reps alike. */
+const SECONDS_PER_REP = 4
+/** Reps assumed for an item that measures neither reps nor seconds. */
+const DEFAULT_REPS = 10
+/** Rest between sets of the same item. */
+const REST_SECONDS = 30
+/** Finding the band, getting into position, putting it away. */
+const SETUP_SECONDS = 20
+/** A set this long *is* the session (cardio block, court time). */
+export const LONG_SET_SECONDS = 300
+/** Setup for one of those — kit on, out of the door. */
+const LONG_SESSION_SETUP_SECONDS = 60
+
+/**
+ * How long an item takes, in minutes. Deliberately crude: a rep costs 4s, a
+ * timed set costs its seconds, sets are separated by 30s of rest, and the item
+ * as a whole carries 20s of setup. Long sets (≥ `LONG_SET_SECONDS` — a 40 min
+ * Zone 2 ride, an hour on court) are counted as their own duration plus one
+ * minute of setup: nobody rests between two halves of a bike session.
+ *
+ * Rounded up to the nearest half minute. It is an estimate for budgeting, not
+ * a stopwatch; the point is that 5×45s isometrics and 3×8 squats stop looking
+ * like the same amount of day.
+ */
+export function estimateMinutes(item: ProtocolItem): number {
+  const sets = Math.max(1, item.sets)
+  const perSet = item.durationSeconds ?? (item.reps ?? DEFAULT_REPS) * SECONDS_PER_REP
+  const seconds =
+    item.durationSeconds !== undefined && item.durationSeconds >= LONG_SET_SECONDS
+      ? sets * item.durationSeconds + LONG_SESSION_SETUP_SECONDS
+      : sets * perSet + REST_SECONDS * (sets - 1) + SETUP_SECONDS
+  return Math.ceil((seconds / 60) * 2) / 2
+}
+
+/** Estimated minutes for a list of entries. */
+export function bucketMinutes(entries: readonly PlanEntry[]): number {
+  return entries.reduce((total, entry) => total + estimateMinutes(entry.item), 0)
+}
+
+/**
+ * Default minutes per bucket — the user's real daily windows. Applied by the
+ * app layer (`useDayPlan`); the pure engine trims only when a budget is passed.
+ */
+export const DEFAULT_BUDGET_MINUTES: Record<Bucket, number> = { couch: 30, quick: 10, workout: 30 }
+
+/** Which setting overrides each bucket's default budget. */
+const BUDGET_SETTING = {
+  couch: 'couchBudgetMinutes',
+  quick: 'quickBudgetMinutes',
+  workout: 'workoutBudgetMinutes',
+} as const satisfies Record<Bucket, keyof PlannerSettings>
+
+/**
+ * Programs whose items are never trimmed by the time budget. The acute shin
+ * rehab is the reason the app exists; it comes off the top of the day.
+ */
+export const ALWAYS_PLANNED_PROGRAMS: readonly ProgramId[] = ['tibant']
+
+/** Ramp thresholds: days since the first completion → share of the budget. */
+const RAMP_STEPS: readonly { days: number; factor: number }[] = [
+  { days: 21, factor: 1 },
+  { days: 14, factor: 0.9 },
+  { days: 7, factor: 0.75 },
+  { days: 0, factor: 0.6 },
+]
+
+/** A layoff this long restarts the ramp from the beginning. */
+export const RAMP_RESTART_GAP_DAYS = 14
+
+/**
+ * How much of the daily budget is available on `date`, as a fraction.
+ *
+ * Weeks one, two and three run at 0.6 / 0.75 / 0.9 of the budget and week four
+ * onwards at full. Day zero is the user's **first ever completion** (no
+ * history at all also reads as day zero — a new user starts light). Coming
+ * back from a layoff of `RAMP_RESTART_GAP_DAYS` or more restarts the ramp.
+ *
+ * `states` is consulted only to ignore paused programs: history from a program
+ * the user has parked should not hold the ramp open for the rest.
+ */
+export function rampFactor(
+  dateISO: string,
+  history: PlannerHistory,
+  states: ProgramState[] = [],
+): number {
+  const paused = new Set(states.filter(s => s.paused).map(s => s.programId))
+  const dates = history.completions
+    .filter(c => !paused.has(c.programId) && c.date <= dateISO)
+    .map(c => c.date)
+    .sort()
+  if (!dates.length) return 0.6
+
+  if (daysBetween(dates[dates.length - 1], dateISO) >= RAMP_RESTART_GAP_DAYS) return 0.6
+
+  const days = daysBetween(dates[0], dateISO)
+  return RAMP_STEPS.find(step => days >= step.days)?.factor ?? 0.6
+}
+
+/**
+ * Fill one bucket up to `budgetMinutes`, in the order given (already
+ * priority → urgency). Items are kept whole: the first item that does not fit
+ * ends the bucket, and everything after it is returned as `trimmed`.
+ *
+ * Two things never count as trimmable — items from `ALWAYS_PLANNED_PROGRAMS`
+ * and work already completed today — and their minutes are charged to the
+ * budget first, so what is left is what the day can genuinely still take. The
+ * first entry is always kept: a bucket with legal work in it is never empty
+ * just because the single item is long.
+ */
+function fillBucket(
+  entries: PlanEntry[],
+  budgetMinutes: number,
+): { kept: PlanEntry[]; trimmed: PlanEntry[] } {
+  const exempt = (entry: PlanEntry) =>
+    entry.completedToday || ALWAYS_PLANNED_PROGRAMS.includes(entry.programId)
+
+  let used = entries.filter(exempt).reduce((total, e) => total + estimateMinutes(e.item), 0)
+  const kept: PlanEntry[] = []
+  const trimmed: PlanEntry[] = []
+
+  for (const entry of entries) {
+    if (exempt(entry)) {
+      kept.push(entry)
+      continue
+    }
+    const minutes = estimateMinutes(entry.item)
+    if (kept.length === 0 || used + minutes <= budgetMinutes) {
+      kept.push(entry)
+      used += minutes
+    } else {
+      trimmed.push(entry)
+    }
+  }
+  return { kept, trimmed }
+}
+
 /**
  * Build the plan for one day.
  *
@@ -444,6 +597,20 @@ export function isUrgent(
  *    program, and stable (authored order) inside a tier. Priority outranks
  *    urgency: the acute program leads the list even on a day full of urgent
  *    3×/week items from lower-priority programs.
+ * 10. **Time budget** — last, once the order is settled, each bucket with a
+ *    configured `settings.<bucket>BudgetMinutes` is filled up to that many
+ *    minutes scaled by `rampFactor` (unless `settings.rampEnabled === false`).
+ *    Budgets are opt-in at this layer: an unset budget leaves the bucket
+ *    whole, and the app supplies `DEFAULT_BUDGET_MINUTES` in `useDayPlan`. See
+ *    `fillBucket`: whole items in order, tibant work and anything already
+ *    completed today exempt and charged first, the first item always kept.
+ *    `plan.minutes` reports what each bucket came to.
+ *
+ * Items the budget cuts are not lost. They break no safety rule, so
+ * `buildBrowse` — which offers everything legal that today's plan does not
+ * already hold — picks them up as extras, exactly like an item whose weekly
+ * frequency is already satisfied. Trimming moves work from "today's plan" to
+ * "here if you want it", nothing more.
  *
  * The planner never *forces* an item onto a day the rules bar — urgency only
  * reorders and flags. It also never plans warm-ups or cool-downs; a program's
@@ -538,7 +705,22 @@ export function buildPlan(
   const buckets: Record<Bucket, PlanEntry[]> = { couch: [], quick: [], workout: [] }
   for (const entry of entries) buckets[entry.bucket].push(entry)
 
-  return { date, buckets }
+  // 10 — time budget, applied to the settled order so the day is filled from
+  // the top: what gets cut is always the least important work in the bucket.
+  // Opt-in at this layer: a bucket with no configured budget is left whole —
+  // the app supplies DEFAULT_BUDGET_MINUTES via useDayPlan, so callers that
+  // never mention time (tests, scripts) see the untrimmed plan.
+  const ramp = settings.rampEnabled === false ? 1 : rampFactor(date, history, states)
+  const minutes: Record<Bucket, number> = { couch: 0, quick: 0, workout: 0 }
+  for (const bucket of Object.keys(buckets) as Bucket[]) {
+    const configured = settings[BUDGET_SETTING[bucket]]
+    if (configured !== undefined) {
+      buckets[bucket] = fillBucket(buckets[bucket], configured * ramp).kept
+    }
+    minutes[bucket] = bucketMinutes(buckets[bucket])
+  }
+
+  return { date, buckets, minutes }
 }
 
 /**
@@ -550,7 +732,10 @@ export function buildPlan(
  * Returns the items of active programs' current phases that live in `bucket`
  * and are **not** on today's plan, but that only missed it for a reason of
  * bookkeeping rather than safety: their weekly frequency is already satisfied
- * (rule 3), or the day's workout size does not include them (rule 4).
+ * (rule 3), the day's workout size does not include them (rule 4), or the
+ * day's time budget ran out before reaching them (rule 10). No extra handling
+ * is needed for that last case: a trimmed item simply is not on the plan, and
+ * anything legal that is not on the plan is an extra.
  *
  * Every safety rule still applies exactly as `buildPlan` applies it — the phase
  * gate (2), the sport-today hard suppression (5), the day-before-sport rule (6),
