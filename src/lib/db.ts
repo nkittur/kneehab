@@ -70,6 +70,18 @@ export type BodyMetric = {
   restingHR?: number
 }
 
+/**
+ * One attempt at a gate test (see `src/programs/tibantTests.ts`). Rows are
+ * append-only — retesting adds a row, and the latest date wins.
+ */
+export type GateTestResult = {
+  id?: number
+  testId: string
+  date: string
+  passed: boolean
+  note?: string
+}
+
 export type Settings = {
   key: 'singleton'
   programStartDate: string // YYYY-MM-DD
@@ -100,6 +112,7 @@ export const db = new Dexie('kneehab') as Dexie & {
   planItems: EntityTable<PlanItem, 'id'>
   checkIns: EntityTable<CheckIn, 'id'>
   bodyMetrics: EntityTable<BodyMetric, 'date'>
+  gateTests: EntityTable<GateTestResult, 'id'>
 }
 
 db.version(1).stores({
@@ -147,6 +160,11 @@ db.version(2)
       }
     }
   })
+
+// v3 adds gate-test results. Dexie carries the unchanged v2 tables forward.
+db.version(3).stores({
+  gateTests: '++id, testId, date, [testId+date]',
+})
 
 export function todayISO(d = new Date()): string {
   const y = d.getFullYear()
@@ -271,6 +289,30 @@ export async function upsertBodyMetric(date: string, patch: Partial<BodyMetric>)
 
 export async function addCheckIn(entry: Omit<CheckIn, 'id'>): Promise<number> {
   return (await db.checkIns.add(entry)) as number
+}
+
+/** Record a gate-test attempt. Append-only — retesting adds another row. */
+export async function recordGateTest(
+  testId: string,
+  passed: boolean,
+  opts: { date?: string; note?: string } = {},
+): Promise<number> {
+  const { date = todayISO(), note } = opts
+  return (await db.gateTests.add({ testId, date, passed, ...(note ? { note } : {}) })) as number
+}
+
+/** The most recent attempt per test id — what the Tests screen shows. */
+export async function latestGateResults(): Promise<Map<string, GateTestResult>> {
+  const rows = await db.gateTests.toArray()
+  const latest = new Map<string, GateTestResult>()
+  for (const row of rows) {
+    const prev = latest.get(row.testId)
+    // Rows are appended, so a later id breaks a same-day tie.
+    if (!prev || row.date > prev.date || (row.date === prev.date && (row.id ?? 0) > (prev.id ?? 0))) {
+      latest.set(row.testId, row)
+    }
+  }
+  return latest
 }
 
 export function planItemsFor(date: string): Promise<PlanItem[]> {

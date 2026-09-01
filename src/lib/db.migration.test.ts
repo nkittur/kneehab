@@ -129,6 +129,20 @@ describe('v1 → v2 migration', () => {
     expect((await db.planItemsFor('2026-08-12'))[0].status).toBe('done')
   })
 
+  it('opens the v3 gateTests table on a database that started at v1', async () => {
+    expect(db.db.verno).toBe(3)
+
+    await db.recordGateTest('b-heel-walk-45s', false, { date: '2026-08-18' })
+    await db.recordGateTest('b-heel-walk-45s', true, { date: '2026-08-20', note: 'clean' })
+    await db.recordGateTest('c-jog-5', false, { date: '2026-08-19' })
+
+    // Retesting appends rather than overwrites; the latest date wins.
+    expect(await db.db.gateTests.where('testId').equals('b-heel-walk-45s').count()).toBe(2)
+    const latest = await db.latestGateResults()
+    expect(latest.get('b-heel-walk-45s')).toMatchObject({ date: '2026-08-20', passed: true, note: 'clean' })
+    expect(latest.get('c-jog-5')?.passed).toBe(false)
+  })
+
   it('setProgramPhase upserts and restamps', async () => {
     const next = await db.setProgramPhase('strength', 'dura_heavy', '2026-08-12')
     expect(next).toEqual({

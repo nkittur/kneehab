@@ -39,7 +39,7 @@ export function ExerciseDetail() {
       <div className="mx-auto max-w-md px-4 pb-28 pt-6 space-y-3">
         <div className="text-sm">That exercise is no longer in the plan.</div>
         <Link to="/" className="text-sm underline">
-          Back to Today
+          Back to exercises
         </Link>
       </div>
     )

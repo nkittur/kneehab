@@ -55,3 +55,40 @@ export function programList(registry: PartialProgramRegistry = PROGRAMS): Progra
 export function phaseOf(program: ProgramDef, phaseId: string): PhaseDef | undefined {
   return program.phases.find(p => p.id === phaseId)
 }
+
+/** Position of a phase in the program's order; -1 when the id is unknown. */
+export function phaseIndexOf(program: ProgramDef, phaseId: string | undefined): number {
+  return phaseId ? program.phases.findIndex(p => p.id === phaseId) : -1
+}
+
+/**
+ * Is `phaseId` still ahead of where the program is now? Phases are ordered by
+ * their position in `program.phases`. A program with no state (or a state
+ * pointing at a phase that no longer exists) counts as being before every
+ * phase; an unknown target is never ahead of anything.
+ */
+export function isPhaseAhead(
+  program: ProgramDef,
+  currentPhaseId: string | undefined,
+  phaseId: string,
+): boolean {
+  const target = phaseIndexOf(program, phaseId)
+  return target >= 0 && phaseIndexOf(program, currentPhaseId) < target
+}
+
+/**
+ * Is `phaseId` the very next phase after the one the program is in? Gate tests
+ * only ever offer a one-phase step, so a program parked two phases back does
+ * not get a one-tap skip out of it. A program with no state (or a state
+ * pointing at a phase that no longer exists) counts as being in its first
+ * phase, which is where it would be seeded.
+ */
+export function isNextPhase(
+  program: ProgramDef,
+  currentPhaseId: string | undefined,
+  phaseId: string,
+): boolean {
+  const target = phaseIndexOf(program, phaseId)
+  const current = Math.max(phaseIndexOf(program, currentPhaseId), 0)
+  return target >= 0 && target === current + 1
+}

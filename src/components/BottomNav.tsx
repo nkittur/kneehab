@@ -1,10 +1,17 @@
 import { NavLink } from 'react-router-dom'
-import { CalendarCheck, LineChart, ListChecks, Settings as SettingsIcon } from 'lucide-react'
+import {
+  ClipboardCheck,
+  Dumbbell,
+  LineChart,
+  ListChecks,
+  Settings as SettingsIcon,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const items = [
-  { to: '/', label: 'Today', Icon: CalendarCheck },
+  { to: '/', label: 'Exercises', Icon: Dumbbell },
   { to: '/programs', label: 'Programs', Icon: ListChecks },
+  { to: '/tests', label: 'Tests', Icon: ClipboardCheck },
   { to: '/progress', label: 'Trends', Icon: LineChart },
   { to: '/settings', label: 'Settings', Icon: SettingsIcon },
 ]
@@ -12,7 +19,7 @@ const items = [
 export function BottomNav() {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-10 border-t bg-background/95 backdrop-blur">
-      <div className="mx-auto grid max-w-md grid-cols-4">
+      <div className="mx-auto grid max-w-md grid-cols-5">
         {items.map(({ to, label, Icon }) => (
           <NavLink
             key={to}

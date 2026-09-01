@@ -1,16 +1,15 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { Undo2 } from 'lucide-react'
-import { clearPlanDeviation, db, todayISO, upsertDailyLog } from '@/lib/db'
-import { entryKey, itemName, useDayPlan, type ResolvedEntry } from '@/lib/useDayPlan'
-import { APP_NAME } from '@/lib/brand'
+import { ChevronDown, Undo2 } from 'lucide-react'
+import { clearPlanDeviation, db, upsertDailyLog, type Settings } from '@/lib/db'
+import { entryKey, itemName, type ResolvedEntry, type ResolvedPlan } from '@/lib/useDayPlan'
+import type { PlanEntry } from '@/lib/planner'
 import { AREA_LABEL, areaLabel, areaShortLabel, programColor } from '@/lib/programColors'
 import type { Bucket, ProgramId, WorkoutSize } from '@/programs/types'
 import { ProgressRing } from '@/components/ProgressRing'
 import { PlanCard } from '@/components/PlanCard'
 import { WorkoutSizeControl } from '@/components/WorkoutSizeControl'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 
@@ -55,6 +54,29 @@ function writeStored(key: string, value: string) {
     sessionStorage.setItem(key, value)
   } catch {
     // Storage blocked (private mode, quota) — the pick just won't outlive the screen.
+  }
+}
+
+/**
+ * Whether the strip is open. Unlike the two filters above this *is* a setting —
+ * "do I want a daily suggestion at all?" — so it outlives the session. Closed by
+ * default: the library below is the point of the screen.
+ */
+const OPEN_KEY = 'durable.suggested.open'
+
+function readOpen(): boolean {
+  try {
+    return localStorage.getItem(OPEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeOpen(open: boolean) {
+  try {
+    localStorage.setItem(OPEN_KEY, open ? '1' : '0')
+  } catch {
+    // Storage blocked — the strip just reopens closed next time.
   }
 }
 
@@ -242,10 +264,24 @@ function SportDayToggle({ date, sport, on }: { date: string; sport?: string | nu
   )
 }
 
-export function Today() {
-  const date = todayISO()
+/**
+ * The day's proposed plan, folded away by default. It is one option on the
+ * Exercises screen rather than the screen itself — the library underneath is
+ * always the full set, and this is the app's opinion about today.
+ */
+export function SuggestedToday({
+  date,
+  plan,
+  browse,
+  settings,
+}: {
+  date: string
+  plan: ResolvedPlan
+  browse: Record<Bucket, PlanEntry[]>
+  settings: Settings
+}) {
   const log = useLiveQuery(() => db.dailyLogs.get(date), [date])
-  const { ready, plan, browse, settings } = useDayPlan(date)
+  const [open, setOpen] = useState(readOpen)
   // Where the user is right now, and what they are working on. Both are read
   // back from the session so a detour into an exercise returns to this view.
   const [view, setView] = useState<View>(() =>
@@ -263,8 +299,12 @@ export function Today() {
     setArea(next)
     writeStored(AREA_KEY, next)
   }
-
-  if (!ready || !plan || !browse || !settings) return null
+  function toggleOpen() {
+    setOpen(prev => {
+      writeOpen(!prev)
+      return !prev
+    })
+  }
 
   const sportOn = log?.sportDay ?? log?.isSportDay ?? false
   const size: WorkoutSize = log?.workoutSize ?? settings.defaultWorkoutSize ?? 'M'
@@ -305,100 +345,134 @@ export function Today() {
     view === 'all' ? sections.filter(s => s.groups.length > 0 || s.skipped.length > 0) : sections
   const nothingPlanned = plan.plannedSets === 0
   const allDone = !nothingPlanned && plan.completedSets >= plan.plannedSets
+  const itemCount = BUCKETS.reduce((n, bucket) => n + plan.buckets[bucket].length, 0)
+  const summary = nothingPlanned
+    ? 'Nothing scheduled · tap to expand'
+    : `${itemCount} item${itemCount === 1 ? '' : 's'} · ${plan.completedSets}/${plan.plannedSets} sets · tap to expand`
 
   return (
-    <div className="mx-auto max-w-md space-y-5 px-4 pb-28 pt-6">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">{APP_NAME}</div>
-          <h1 className="text-2xl font-semibold">{heading}</h1>
-        </div>
-        <SportDayToggle date={date} sport={log?.sport} on={sportOn} />
-      </header>
-
-      <div className="sticky top-0 z-20 -mx-4 space-y-2 border-b bg-background/95 px-4 py-2 backdrop-blur">
-        <ContextPicker value={view} onChange={pickView} />
-        {areas.length > 1 && <AreaTabs areas={areas} value={activeArea} onChange={pickArea} />}
-      </div>
-
-      <div className="flex items-center gap-4">
-        <ProgressRing value={pct} size={96} label={`${plan.completedSets}/${plan.plannedSets} sets`} />
-        <div className="flex-1 space-y-2">
+    <section className="overflow-hidden rounded-lg border">
+      <button
+        type="button"
+        onClick={toggleOpen}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-accent"
+      >
+        <div className="min-w-0 flex-1">
           <div className="text-sm font-medium">
-            {allDone ? 'Done for today 🎉' : nothingPlanned ? 'Nothing scheduled' : 'Sets planned today'}
+            Suggested today
+            {allDone && ' 🎉'}
           </div>
-          <p className="text-xs text-muted-foreground">
-            {allDone
-              ? 'Everything on the plan is ticked. Rest is training too.'
-              : nothingPlanned
-                ? 'Every program is paused or resting today.'
-                : 'Skipped items are left out of the total.'}
-          </p>
+          <div className="truncate text-xs text-muted-foreground">{open ? heading : summary}</div>
         </div>
-      </div>
+        <ChevronDown
+          className={cn('size-4 shrink-0 text-muted-foreground transition-transform', open && 'rotate-180')}
+          aria-hidden
+        />
+      </button>
 
-      {visible.map(({ section, minutes, groups, skipped }) => (
-        <section key={section.bucket} className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-baseline gap-2">
-              <span className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-                {section.emoji} {section.title}
-                {minutes > 0 && <> · ~{minutes} min</>}
-              </span>
-              <span className="text-xs text-muted-foreground">{section.hint}</span>
-            </div>
-            {section.bucket === 'workout' && (
-              <WorkoutSizeControl value={size} onChange={s => upsertDailyLog(date, { workoutSize: s })} />
-            )}
+      {open && (
+        <div className="space-y-5 border-t px-4 pb-4 pt-3">
+          <div className="flex justify-end">
+            <SportDayToggle date={date} sport={log?.sport} on={sportOn} />
           </div>
 
-          {groups.map(group => (
-            <div key={group.programId} className="space-y-2">
-              {/* With one area selected the tab above already names it. */}
-              {activeArea === 'all' && <AreaHeader programId={group.programId} label={group.label} />}
-              {group.entries.map(entry => (
-                <PlanCard
-                  key={entryKey(entry.programId, entry.baseItemId ?? entry.itemId)}
-                  entry={entry}
-                  date={date}
-                  doneSets={plan.doneSets.get(entryKey(entry.programId, entry.itemId)) ?? new Set()}
-                />
-              ))}
+          <div className="space-y-2">
+            <ContextPicker value={view} onChange={pickView} />
+            {areas.length > 1 && <AreaTabs areas={areas} value={activeArea} onChange={pickArea} />}
+          </div>
+
+          <div className="flex items-center gap-4">
+            <ProgressRing
+              value={pct}
+              size={96}
+              label={`${plan.completedSets}/${plan.plannedSets} sets`}
+            />
+            <div className="flex-1 space-y-2">
+              <div className="text-sm font-medium">
+                {allDone
+                  ? 'Done for today 🎉'
+                  : nothingPlanned
+                    ? 'Nothing scheduled'
+                    : 'Sets planned today'}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {allDone
+                  ? 'Everything on the plan is ticked. Rest is training too.'
+                  : nothingPlanned
+                    ? 'Every program is paused or resting today.'
+                    : 'Skipped items are left out of the total.'}
+              </p>
             </div>
+          </div>
+
+          {visible.map(({ section, minutes, groups, skipped }) => (
+            <section key={section.bucket} className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+                    {section.emoji} {section.title}
+                    {minutes > 0 && <> · ~{minutes} min</>}
+                  </span>
+                  <span className="text-xs text-muted-foreground">{section.hint}</span>
+                </div>
+                {section.bucket === 'workout' && (
+                  <WorkoutSizeControl
+                    value={size}
+                    onChange={s => upsertDailyLog(date, { workoutSize: s })}
+                  />
+                )}
+              </div>
+
+              {groups.map(group => (
+                <div key={group.programId} className="space-y-2">
+                  {/* With one area selected the tab above already names it. */}
+                  {activeArea === 'all' && (
+                    <AreaHeader programId={group.programId} label={group.label} />
+                  )}
+                  {group.entries.map(entry => (
+                    <PlanCard
+                      key={entryKey(entry.programId, entry.baseItemId ?? entry.itemId)}
+                      entry={entry}
+                      date={date}
+                      doneSets={plan.doneSets.get(entryKey(entry.programId, entry.itemId)) ?? new Set()}
+                    />
+                  ))}
+                </div>
+              ))}
+
+              {view !== 'all' && groups.length === 0 && (
+                <p className="text-sm text-muted-foreground">Nothing you can do here right now.</p>
+              )}
+
+              {skipped.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-0.5">
+                  {skipped.map(entry => (
+                    <button
+                      key={entryKey(entry.programId, entry.itemId)}
+                      type="button"
+                      onClick={() => clearPlanDeviation(date, entry.programId, entry.itemId)}
+                      className={cn(
+                        'inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1',
+                        'text-[11px] text-muted-foreground hover:bg-accent',
+                      )}
+                    >
+                      <Undo2 className="size-3" />
+                      {itemName(entry.item)} · skipped
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
           ))}
 
-          {view !== 'all' && groups.length === 0 && (
-            <p className="text-sm text-muted-foreground">Nothing you can do here right now.</p>
+          {visible.length === 0 && (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No items scheduled today. Check the Programs tab — a program may be paused.
+            </p>
           )}
-
-          {skipped.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-0.5">
-              {skipped.map(entry => (
-                <button
-                  key={entryKey(entry.programId, entry.itemId)}
-                  type="button"
-                  onClick={() => clearPlanDeviation(date, entry.programId, entry.itemId)}
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1',
-                    'text-[11px] text-muted-foreground hover:bg-accent',
-                  )}
-                >
-                  <Undo2 className="size-3" />
-                  {itemName(entry.item)} · skipped
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
-      ))}
-
-      {visible.length === 0 && (
-        <Card>
-          <CardContent className="p-6 text-center text-sm text-muted-foreground">
-            No items scheduled today. Check the Programs tab — a program may be paused.
-          </CardContent>
-        </Card>
+        </div>
       )}
-    </div>
+    </section>
   )
 }

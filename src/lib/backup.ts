@@ -1,8 +1,11 @@
 import { db } from './db'
 import { APP_NAME } from './brand'
 
-/** Current export format. v1 exports (three legacy tables) still import. */
-export const BACKUP_VERSION = 'durable-v2'
+/** Current export format. v2 and v1 (three legacy tables) exports still import. */
+export const BACKUP_VERSION = 'durable-v3'
+
+/** Older Durable formats importJSON still accepts. v2 simply has no `gateTests`. */
+const LEGACY_DURABLE_VERSIONS = ['durable-v2']
 
 export type BackupFile = {
   version: string
@@ -14,10 +17,11 @@ export type BackupFile = {
   planItems: unknown[]
   checkIns: unknown[]
   bodyMetrics: unknown[]
+  gateTests: unknown[]
 }
 
 export async function exportBackup(): Promise<BackupFile> {
-  const [dailyLogs, setCompletions, settings, programState, planItems, checkIns, bodyMetrics] =
+  const [dailyLogs, setCompletions, settings, programState, planItems, checkIns, bodyMetrics, gateTests] =
     await Promise.all([
       db.dailyLogs.toArray(),
       db.setCompletions.toArray(),
@@ -26,6 +30,7 @@ export async function exportBackup(): Promise<BackupFile> {
       db.planItems.toArray(),
       db.checkIns.toArray(),
       db.bodyMetrics.toArray(),
+      db.gateTests.toArray(),
     ])
   return {
     version: BACKUP_VERSION,
@@ -37,6 +42,7 @@ export async function exportBackup(): Promise<BackupFile> {
     planItems,
     checkIns,
     bodyMetrics,
+    gateTests,
   }
 }
 
@@ -63,19 +69,31 @@ export async function copyExportToClipboard(): Promise<void> {
 type Row = { id?: number }
 
 /**
- * Replace all local data with a backup. Accepts this app's v2 exports and the
- * legacy kneehab v1 shape (`version: 1`, three tables) — v1 rows then flow
- * through the Dexie v2 upgrade path on the next open.
+ * Replace all local data with a backup. Accepts this app's v3 and v2 exports
+ * (a v2 file carries no `gateTests`, so gate results simply come back empty)
+ * and the legacy kneehab v1 shape (`version: 1`, three tables) — v1 rows then
+ * flow through the Dexie v2 upgrade path on the next open.
  */
 export async function importJSON(text: string) {
   const data = JSON.parse(text) as Omit<Partial<BackupFile>, 'version'> & { version?: string | number }
   const isV1 = data.version === 1
-  const isV2 = data.version === BACKUP_VERSION
-  if (!isV1 && !isV2) throw new Error(`Unsupported backup version: ${String(data.version)}`)
+  const isDurable =
+    data.version === BACKUP_VERSION ||
+    (typeof data.version === 'string' && LEGACY_DURABLE_VERSIONS.includes(data.version))
+  if (!isV1 && !isDurable) throw new Error(`Unsupported backup version: ${String(data.version)}`)
 
   await db.transaction(
     'rw',
-    [db.dailyLogs, db.setCompletions, db.settings, db.programState, db.planItems, db.checkIns, db.bodyMetrics],
+    [
+      db.dailyLogs,
+      db.setCompletions,
+      db.settings,
+      db.programState,
+      db.planItems,
+      db.checkIns,
+      db.bodyMetrics,
+      db.gateTests,
+    ],
     async () => {
       await Promise.all([
         db.dailyLogs.clear(),
@@ -85,6 +103,7 @@ export async function importJSON(text: string) {
         db.planItems.clear(),
         db.checkIns.clear(),
         db.bodyMetrics.clear(),
+        db.gateTests.clear(),
       ])
 
       if (data.dailyLogs?.length) await db.dailyLogs.bulkPut(data.dailyLogs as never)
@@ -106,6 +125,9 @@ export async function importJSON(text: string) {
         await db.checkIns.bulkAdd((data.checkIns as Row[]).map(c => ({ ...c, id: undefined })) as never)
       }
       if (data.bodyMetrics?.length) await db.bodyMetrics.bulkPut(data.bodyMetrics as never)
+      if (data.gateTests?.length) {
+        await db.gateTests.bulkAdd((data.gateTests as Row[]).map(g => ({ ...g, id: undefined })) as never)
+      }
     },
   )
 }

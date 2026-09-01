@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { AlertTriangle, Pause, Play } from 'lucide-react'
+import { AlertTriangle, Check, Pause, Play } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   db,
   setProgramPaused,
+  setProgramPhase,
   todayISO,
   type ProgramState,
 } from '@/lib/db'
@@ -23,6 +25,13 @@ import { programColor } from '@/lib/programColors'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 
 function Disclosure({ title, children }: { title: string; children: React.ReactNode }) {
@@ -138,8 +147,66 @@ function ProgramNotes({ program, phase }: { program: ProgramDef; phase?: PhaseDe
   }
 }
 
+/**
+ * The escape hatch. Phases normally move on a check-in or a passed gate group
+ * (Tests tab); this is for putting a program where it actually is when the app
+ * disagrees — after a flare, or a phase passed away from the phone.
+ */
+function PhaseDialog({
+  program,
+  currentPhaseId,
+  open,
+  onOpenChange,
+}: {
+  program: ProgramDef
+  currentPhaseId?: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  async function pick(phaseId: string) {
+    onOpenChange(false)
+    if (phaseId === currentPhaseId) return
+    try {
+      await setProgramPhase(program.id, phaseId)
+      toast.success(`${program.name} moved to ${program.phases.find(p => p.id === phaseId)!.name}`)
+    } catch {
+      toast.error('Could not change the phase — try again.')
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Change phase</DialogTitle>
+          <DialogDescription>
+            {program.name} — this only moves the program; nothing you have logged changes.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1">
+          {program.phases.map(phase => {
+            const current = phase.id === currentPhaseId
+            return (
+              <Button
+                key={phase.id}
+                variant={current ? 'secondary' : 'ghost'}
+                className="h-auto w-full justify-start whitespace-normal py-2 text-left"
+                onClick={() => pick(phase.id)}
+              >
+                <span className="flex-1">{phase.name}</span>
+                {current && <Check className="shrink-0" />}
+              </Button>
+            )
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function ProgramCard({ program, state }: { program: ProgramDef; state?: ProgramState }) {
   const [checkInOpen, setCheckInOpen] = useState(false)
+  const [phaseOpen, setPhaseOpen] = useState(false)
   const phase = state ? phaseOf(program, state.phase) : undefined
   const index = phase ? program.phases.findIndex(p => p.id === phase.id) : -1
   const days = state ? daysBetween(state.startedPhaseAt, todayISO()) : 0
@@ -193,6 +260,16 @@ function ProgramCard({ program, state }: { program: ProgramDef; state?: ProgramS
           </span>
         </div>
 
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setPhaseOpen(true)}
+            className="text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
+          >
+            Change phase
+          </button>
+        </div>
+
         <div className="space-y-2">
           {phase?.exitCriteria && (
             <Disclosure title="Exit criteria">
@@ -232,6 +309,12 @@ function ProgramCard({ program, state }: { program: ProgramDef; state?: ProgramS
       {phase && (
         <CheckInDialog program={program} phase={phase} open={checkInOpen} onOpenChange={setCheckInOpen} />
       )}
+      <PhaseDialog
+        program={program}
+        currentPhaseId={state?.phase}
+        open={phaseOpen}
+        onOpenChange={setPhaseOpen}
+      />
     </Card>
   )
 }

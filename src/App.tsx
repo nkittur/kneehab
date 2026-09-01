@@ -4,9 +4,10 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Toaster } from '@/components/ui/sonner'
 import { BottomNav } from '@/components/BottomNav'
 import { getSettings } from '@/lib/db'
-import { Today } from '@/pages/Today'
+import { ExercisesPage } from '@/pages/Exercises'
 import { ExerciseDetail } from '@/pages/ExerciseDetail'
 import { ProgramsPage } from '@/pages/Programs'
+import { TestsPage } from '@/pages/Tests'
 import { TrendsPage } from '@/pages/Trends'
 import { SettingsPage } from '@/pages/Settings'
 
@@ -30,9 +31,10 @@ export default function App() {
     <HashRouter>
       <ScrollToTop />
       <Routes>
-        <Route path="/" element={<Today />} />
+        <Route path="/" element={<ExercisesPage />} />
         <Route path="/exercise/:programId/:itemId" element={<ExerciseDetail />} />
         <Route path="/programs" element={<ProgramsPage />} />
+        <Route path="/tests" element={<TestsPage />} />
         <Route path="/progress" element={<TrendsPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Routes>

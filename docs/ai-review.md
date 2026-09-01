@@ -8,7 +8,7 @@ it — roughly every 2–4 weeks, or whenever something is clearly not working.
 
 1. **Export.** Settings → **Copy AI-review export** (or **Download JSON** if you want a file). The
    export is every local table: `dailyLogs`, `setCompletions`, `settings`, `programState`,
-   `planItems`, `checkIns`, `bodyMetrics`, stamped `version: "durable-v2"`.
+   `planItems`, `checkIns`, `bodyMetrics`, `gateTests`, stamped `version: "durable-v3"`.
 2. **Open a Claude session in this repo** — the review needs the code and the research docs, not
    just the numbers.
 3. **Ask for the review.** Something like:

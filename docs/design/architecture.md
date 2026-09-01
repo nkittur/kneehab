@@ -46,7 +46,7 @@ Scheduling rules (encoded, from the research docs' sequencing sections):
 6. Phase advancement is gated on weekly check-ins (pain/function scores vs. the protocol's exit
    criteria); the app *proposes* advancement, user confirms. Regression rules on pain spikes.
 
-## Data model (Dexie v2, migrating v1)
+## Data model (Dexie v3, migrating v1)
 
 ```ts
 programState:   { programId, phase, startedPhaseAt, paused? }
@@ -56,6 +56,7 @@ setCompletions: (kept; gains programId — v1 rows map to programId 'knee')
 dailyLogs:      { date, sportDay?, sport?, painScores: {knee, tibant, wrist}, pops?, notes?, updatedAt }
 checkIns:       { id++, date, programId, answers, proposedAction }
 bodyMetrics:    { date, weightKg?, restingHR? }
+gateTests:      { id++, testId, date, passed, note? }   // append-only; latest date wins
 settings:       { key:'singleton', equipment: string[], defaultWorkoutSize, sportDaysHint, darkMode }
 ```
 
@@ -64,11 +65,27 @@ Migration: v1 `dailyLogs.pain/pops` → `painScores.knee`/`pops`; v1 completions
 
 ## UI (keep bottom nav, max-w-md mobile layout)
 
-- **Today** — date header; per-area pain quick-log chips; three bucket sections with item cards:
-  tap card = detail, one-tap "✓ all sets", per-set ticks, swap (sheet of alternates), skip.
-  Workout bucket has S/M/L segmented control. Sport-day toggle stays.
+- **Exercises** (home, `/`) — the full library first, the day's suggestion second.
+  - *Suggested today* — a collapsible strip, closed by default (choice persisted in
+    `localStorage`), summarised when closed as "N items · done/planned sets". Open, it is the
+    old Today screen: sport-day toggle, context/area filters, progress ring, and the three bucket
+    sections with item cards (tap = detail, one-tap "✓ all sets", per-set ticks, swap, skip;
+    S/M/L segmented control on the workout bucket).
+  - *Library* — every program in registry priority order, grouped by phase. The program's current
+    phase (from `programState`) is expanded, the rest collapsed; pre/postgame blocks get their own
+    groups. Each row shows name, sets × amount, tempo/load, context-tag chip, and a "today" badge
+    when the item is in today's plan. Tap opens `/exercise/:programId/:itemId`. Browsing only —
+    set logging lives on the detail screen.
 - **Programs** — one card per program: phase, days-in-phase, progress vs. exit criteria, weekly
-  check-in entry point, pause/resume.
+  check-in entry point, pause/resume, and a subdued "Change phase" escape hatch (dialog listing the
+  program's phases, current one ticked, calling `setProgramPhase`).
+- **Tests** — the gate tests from `src/programs/tibantTests.ts`, grouped by phase gate (Phase B
+  exit, Phase C entry/exit, return to play): pass bar, how-to steps, pass/fail buttons per test,
+  and a per-group progress bar. Results append to `gateTests`. A group carrying `unlocks`
+  (B-exit → `phaseC`, C-exit → `phaseD`) shows an advance banner once every test in it has a
+  passing latest result and the program is still behind that phase — one tap calls
+  `setProgramPhase`, and the live query retires the banner. Phase order is the index in
+  `program.phases` (`phaseIndexOf` / `isPhaseAhead` in `src/programs/index.ts`).
 - **Trends** — recharts: pain per area over time, adherence, weight trend, weekly minutes.
 - **Settings** — equipment owned, rename/brand, export/import JSON (existing backup.ts extended),
   "AI review export" button (same export + a prompt template from `docs/ai-review.md`).
@@ -86,7 +103,7 @@ holds the ritual: export JSON → session reads it plus `docs/research/*` → Cl
 2. **Content ×3** — research docs → `src/programs/{tibant,wrist-fingers,strength-cardio}.ts`
    (+ knee port). Parallel, after types land.
 3. **Planner** — full rules + tests. After types; parallel with content.
-4. **UI** — Today/Programs/Trends/Settings rework. After 1+3; content can be stubbed.
+4. **UI** — Exercises/Programs/Tests/Trends/Settings rework. After 1+3; content can be stubbed.
 5. **Polish** — migration test against real data shape, PWA manifest rebrand, build, deploy.
 
 Each slice: opus-worker implements → opus-reviewer verifies → coordinator accepts.

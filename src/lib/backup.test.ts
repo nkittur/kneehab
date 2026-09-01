@@ -1,10 +1,10 @@
 // @vitest-environment node
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { db } from './db'
+import { db, latestGateResults } from './db'
 import { BACKUP_VERSION, exportBackup, exportJSON, importJSON } from './backup'
 
-/** Round-trip the v2 export, and check that a legacy v1 export still imports. */
+/** Round-trip the v3 export, and check that the older v2 and v1 exports still import. */
 
 async function clearAll() {
   await Promise.all([
@@ -15,6 +15,7 @@ async function clearAll() {
     db.planItems.clear(),
     db.checkIns.clear(),
     db.bodyMetrics.clear(),
+    db.gateTests.clear(),
   ])
 }
 
@@ -48,6 +49,10 @@ async function seed() {
   })
   await db.checkIns.add({ date: '2026-08-20', programId: 'knee', answers: { pain_daily: 2 }, proposedAction: 'hold' })
   await db.bodyMetrics.put({ date: '2026-08-20', weightKg: 80.5 })
+  await db.gateTests.bulkAdd([
+    { testId: 'b-heel-walk-45s', date: '2026-08-18', passed: false },
+    { testId: 'b-heel-walk-45s', date: '2026-08-20', passed: true, note: 'easy' },
+  ])
 }
 
 beforeEach(async () => {
@@ -56,7 +61,7 @@ beforeEach(async () => {
 })
 
 describe('backup', () => {
-  it('round-trips every v2 table', async () => {
+  it('round-trips every v3 table', async () => {
     await seed()
     const json = await exportJSON()
     expect(JSON.parse(json).version).toBe(BACKUP_VERSION)
@@ -73,10 +78,32 @@ describe('backup', () => {
     expect(after.planItems).toHaveLength(1)
     expect(after.checkIns).toHaveLength(1)
     expect(after.bodyMetrics).toEqual([{ date: '2026-08-20', weightKg: 80.5 }])
+    expect(after.gateTests).toHaveLength(2)
 
     const log = await db.dailyLogs.get('2026-08-20')
     expect(log?.painScores).toEqual({ knee: 2, tibant: 5 })
     expect(log?.workoutSize).toBe('S')
+
+    // The latest attempt wins, and the note survives the round trip.
+    const latest = await latestGateResults()
+    expect(latest.get('b-heel-walk-45s')).toMatchObject({
+      date: '2026-08-20',
+      passed: true,
+      note: 'easy',
+    })
+  })
+
+  it('accepts a durable-v2 export, which carries no gate tests', async () => {
+    await seed()
+    const v2 = { ...(await exportBackup()), version: 'durable-v2' } as Record<string, unknown>
+    delete v2.gateTests
+
+    await clearAll()
+    await importJSON(JSON.stringify(v2))
+
+    const after = await exportBackup()
+    expect(after.bodyMetrics).toEqual([{ date: '2026-08-20', weightKg: 80.5 }])
+    expect(after.gateTests).toEqual([])
   })
 
   it('accepts a legacy kneehab v1 export', async () => {
