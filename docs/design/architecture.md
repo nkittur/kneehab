@@ -71,11 +71,15 @@ Migration: v1 `dailyLogs.pain/pops` → `painScores.knee`/`pops`; v1 completions
     old Today screen: sport-day toggle, context/area filters, progress ring, and the three bucket
     sections with item cards (tap = detail, one-tap "✓ all sets", per-set ticks, swap, skip;
     S/M/L segmented control on the workout bucket).
-  - *Library* — every program in registry priority order, grouped by phase. The program's current
-    phase (from `programState`) is expanded, the rest collapsed; pre/postgame blocks get their own
-    groups. Each row shows name, sets × amount, tempo/load, context-tag chip, and a "today" badge
-    when the item is in today's plan. Tap opens `/exercise/:programId/:itemId`. Browsing only —
-    set logging lives on the detail screen.
+  - *Library* — one area at a time. A row of area tabs (Shin, Knee, Wrist, Fingers, Strength,
+    Cardio) picks the program; below it a row of level chips (one per phase, plus Pre/Post-game
+    blocks where present) toggles which levels are listed. Both picks persist in `localStorage`
+    (`durable.library.area`, `durable.library.hidden.<programId>` — the *hidden* level ids, so a
+    phase added later shows up rather than being filtered away). Every enabled level is listed
+    flat under its heading, the program's current phase (from `programState`) marked "current".
+    Each row shows name, sets × amount, tempo/load, context-tag chip, and a "today" badge when
+    the item is in today's plan. Tap opens `/exercise/:programId/:itemId`. Browsing only — set
+    logging lives on the detail screen.
 - **Programs** — one card per program: phase, days-in-phase, progress vs. exit criteria, weekly
   check-in entry point, pause/resume, and a subdued "Change phase" escape hatch (dialog listing the
   program's phases, current one ticked, calling `setProgramPhase`).
